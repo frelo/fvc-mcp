@@ -1,0 +1,45 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Platforms>x64</Platforms>
+    <PlatformTarget>x64</PlatformTarget>
+    <!-- Restore must produce win-x64 assets or the single-file publish below fails with
+         NETSDK1047 the first time the solution is built with /restore. -->
+    <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
+    <LangVersion>latest</LangVersion>
+    <Configurations>Debug;Release;Debug64;Release64</Configurations>
+    <AssemblyName>fvc-mcp</AssemblyName>
+    <RootNamespace>FvcMcpServer</RootNamespace>
+    <!-- The MCP host speaks JSON-RPC over stdout. Nothing else may write there. -->
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="ModelContextProtocol" Version="2.1.0" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.0" />
+  </ItemGroup>
+
+  <!--
+    The installer ships ONE file, not the ~38 loose assemblies a plain build emits.
+    Two reasons: staging a long DLL list is exactly the kind of thing that silently drifts
+    out of sync with the installer script, and fvc-mcp.exe installs into the same folder as
+    VideoCataloger.exe, where its Microsoft.Extensions.* copies would sit next to the
+    application's own.
+
+    Publishing after Build keeps `msbuild VideoCataloger.sln` sufficient to produce
+    everything the packaging step needs - update_files.bat stages from publish\$(Configuration).
+  -->
+  <Target Name="PublishSingleFileForInstaller"
+          AfterTargets="Build"
+          Condition="'$(_FvcMcpInnerPublish)' != 'true'">
+    <MSBuild Projects="$(MSBuildProjectFullPath)"
+             Targets="Publish"
+             Properties="Configuration=$(Configuration);Platform=$(Platform);RuntimeIdentifier=win-x64;SelfContained=false;PublishSingleFile=true;PublishDir=$(MSBuildProjectDirectory)\publish\$(Configuration)\;_FvcMcpInnerPublish=true" />
+    <Message Importance="high" Text="fvc-mcp -&gt; $(MSBuildProjectDirectory)\publish\$(Configuration)\fvc-mcp.exe" />
+  </Target>
+
+</Project>

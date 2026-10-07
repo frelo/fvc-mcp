@@ -1,0 +1,163 @@
+{
+  "manifest_version": "0.3",
+  "name": "fast-video-cataloger",
+  "display_name": "Fast Video Cataloger",
+  "version": "10.4.0",
+  "description": "Search, view and tag your local video library from Claude: transcripts, scenes, visual search.",
+  "long_description": "Fast Video Cataloger keeps a searchable catalog of your own video files on Windows: scene thumbnails, keywords, transcripts and faces. This extension lets Claude work with that catalog. Find videos and moments by what was said or by what the picture shows (visual search, nothing tagged first), fetch scene thumbnails to judge a shot, and, with an Editor key, add keywords and gather clips into bins.\n\n**Requires Fast Video Cataloger 10.4 or later** (Windows, free 30-day trial) with your catalog shared through its server: in the program, open the start page's Server section and click Setup. Create an API key with Manage Users in the same section: Viewer to search and read, Editor to also tag and build bins.\n\nThe extension talks to the Fast Video Cataloger server on your own computer. No video is uploaded; Claude receives the titles, transcript lines and scene images it asks for.",
+  "author": {
+    "name": "VideoStorm Sweden AB",
+    "url": "https://videocataloger.com/"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/frelo/fvc-mcp.git"
+  },
+  "homepage": "https://videocataloger.com/mcp-server-video-library/",
+  "documentation": "https://videocataloger.com/docs/server/serving-media/mcp-server/",
+  "support": "https://github.com/frelo/fvc-mcp/issues",
+  "icon": "icon.png",
+  "server": {
+    "type": "binary",
+    "entry_point": "server/fvc-mcp.exe",
+    "mcp_config": {
+      "command": "${__dirname}/server/fvc-mcp.exe",
+      "args": [],
+      "env": {
+        "FVC_SERVER_URL": "${user_config.server_url}",
+        "FVC_API_KEY": "${user_config.api_key}"
+      }
+    }
+  },
+  "tools": [
+    {
+      "name": "search_videos",
+      "description": "Find videos by free text or by keyword."
+    },
+    {
+      "name": "search_scenes",
+      "description": "Find individual scenes, with their timecodes."
+    },
+    {
+      "name": "search_scenes_semantic",
+      "description": "Find scenes by describing what is in the picture, or scenes that look like a given one. Nothing has to be tagged."
+    },
+    {
+      "name": "search_transcripts",
+      "description": "Find spoken words, with their video and timecode."
+    },
+    {
+      "name": "search_actors",
+      "description": "Find people by name or tag."
+    },
+    {
+      "name": "list_keywords",
+      "description": "The keywords the catalog actually uses, to search with."
+    },
+    {
+      "name": "get_video",
+      "description": "One catalog entry in full."
+    },
+    {
+      "name": "get_video_scenes",
+      "description": "A video's scene thumbnails in timecode order."
+    },
+    {
+      "name": "get_video_transcript",
+      "description": "A video's transcript as timed lines."
+    },
+    {
+      "name": "get_video_tags",
+      "description": "A video's keywords."
+    },
+    {
+      "name": "get_video_actors",
+      "description": "A video's cast."
+    },
+    {
+      "name": "get_scene_image",
+      "description": "The thumbnail image itself, so the assistant can see the shot."
+    },
+    {
+      "name": "catalog_stats",
+      "description": "Catalog size and the Fast Video Cataloger build serving it."
+    },
+    {
+      "name": "list_bins",
+      "description": "The catalog's bins (collections)."
+    },
+    {
+      "name": "get_bin_videos",
+      "description": "The videos in a bin."
+    },
+    {
+      "name": "tag_video",
+      "description": "Add keywords to a video (Editor key)."
+    },
+    {
+      "name": "tag_scene",
+      "description": "Add keywords to a single scene (Editor key)."
+    },
+    {
+      "name": "untag_video",
+      "description": "Remove named keywords from a video (Editor key)."
+    },
+    {
+      "name": "untag_scene",
+      "description": "Remove named keywords from a scene (Editor key)."
+    },
+    {
+      "name": "create_bin",
+      "description": "Create a bin (Editor key)."
+    },
+    {
+      "name": "add_video_to_bin",
+      "description": "Add a video to a bin (Editor key)."
+    },
+    {
+      "name": "index_video",
+      "description": "Index a catalog entry that has no thumbnails yet (Editor key)."
+    },
+    {
+      "name": "list_videos_needing_indexing",
+      "description": "Catalog entries that have no thumbnails yet."
+    }
+  ],
+  "tools_generated": false,
+  "keywords": [
+    "video",
+    "video library",
+    "footage",
+    "media asset management",
+    "video search",
+    "transcripts",
+    "visual search",
+    "windows",
+    "local"
+  ],
+  "license": "MIT",
+  "privacy_policies": [
+    "https://videocataloger.com/privacy-policy/"
+  ],
+  "compatibility": {
+    "platforms": [
+      "win32"
+    ]
+  },
+  "user_config": {
+    "server_url": {
+      "type": "string",
+      "title": "Fast Video Cataloger server address",
+      "description": "The address of your Fast Video Cataloger server. Leave as is when it runs on this computer.",
+      "default": "http://localhost:8754",
+      "required": true
+    },
+    "api_key": {
+      "type": "string",
+      "title": "API key",
+      "description": "Create one in Fast Video Cataloger with Manage Users in the start page's Server section. Viewer to search and read, Editor to also tag and build bins.",
+      "sensitive": true,
+      "required": true
+    }
+  }
+}

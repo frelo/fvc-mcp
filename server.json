@@ -1,0 +1,36 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "com.videocataloger/fvc-mcp",
+  "title": "Fast Video Cataloger",
+  "description": "Search, view and tag your local video library from Claude: transcripts, scenes, visual search.",
+  "version": "10.4.0",
+  "websiteUrl": "https://videocataloger.com/mcp-server-video-library/",
+  "repository": {
+    "url": "https://github.com/frelo/fvc-mcp",
+    "source": "github"
+  },
+  "packages": [
+    {
+      "registryType": "mcpb",
+      "identifier": "https://github.com/frelo/fvc-mcp/releases/download/v10.4.0/fvc-mcp-10.4.0.mcpb",
+      "fileSha256": "1438aa0c68e4e313e471ac1c5d868cadb8be54183a42c7bc7379faef0534891d",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "FVC_SERVER_URL",
+          "description": "Address of your Fast Video Cataloger server",
+          "default": "http://localhost:8754",
+          "isRequired": false
+        },
+        {
+          "name": "FVC_API_KEY",
+          "description": "API key from Manage Users in Fast Video Cataloger (Viewer or Editor)",
+          "isRequired": true,
+          "isSecret": true
+        }
+      ]
+    }
+  ]
+}
