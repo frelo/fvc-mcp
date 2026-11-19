@@ -59,9 +59,13 @@ you expect, since a wrong schema fails at call time rather than at build time.
 
 ## Testing
 
-There is no automated test project. To exercise it, drive the protocol over stdio with stdin
-held open — piping a file gives the transport EOF before it writes any response, so it looks
-like the server produced nothing.
+The `api` section of `applications/VideoCAT/ServerTest` (`ApiContract.cs`) runs against a real
+`Host.exe`: every tool is called through `CatalogTools` and `FvcClient` with Editor and Viewer
+keys, every tool is checked against the tables of `mcp-server.md`, and `fvc-mcp.exe` itself is
+driven over stdio (`initialize`, `tools/list`, `tools/call`). `run_tests.ps1` runs it with the
+rest; close Fast Video Cataloger first, since the server's indexer needs port 8734.
 
+To try it by hand, drive the protocol over stdio with stdin held open — piping a file gives the
+transport EOF before it writes any response, so it looks like the server produced nothing.
 Send `initialize`, then `notifications/initialized`, then `tools/list`, then a `tools/call`,
 reading one response line after each request.

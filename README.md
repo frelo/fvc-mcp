@@ -11,7 +11,8 @@ the filing for you.
 - Find videos and moments by what was said, with timecodes
 - Find scenes by describing the picture ("a drone shot over a city at night"), nothing tagged first
 - Fetch scene thumbnails so the assistant can see and judge a shot
-- With an Editor key: add or remove keywords, build bins, index new videos
+- With an Editor key: add or remove keywords, build bins, edit video details and cast, manage
+  keywords, keyword groups and people, index new videos
 
 It runs against the Fast Video Cataloger server on your own computer. No video is uploaded; the
 assistant receives the titles, transcript lines and scene images it asks for.
@@ -22,13 +23,15 @@ More: [MCP server for your video library](https://videocataloger.com/mcp-server-
 
 - Windows 10 or 11 (x64)
 - [Fast Video Cataloger](https://videocataloger.com/download/?utm_source=github&utm_medium=referral&utm_campaign=fvc-mcp)
-  10.4 or later. The free 30-day trial works. `fvc-mcp.exe` is also installed with the program,
+  10.4 or later; the tools added since then need the server version that added them (10.5: video
+  details, cast, taking a video out of a bin; 10.6: keyword management, keyword groups, people,
+  video file path). The free 30-day trial works. `fvc-mcp.exe` is also installed with the program,
   together with the .NET 10 runtime it needs.
 - Your catalog shared through the Fast Video Cataloger server: in the program, open the start
   page's **Server** section and click **Setup**. The assistant connects to the server, not to the
   desktop program, so it works with the program closed.
 - An API key: **Manage Users** in the same Server section. `Viewer` to search and read, `Editor`
-  to also tag and build bins.
+  to also tag, build bins and edit the catalog.
 
 ## Install
 
@@ -81,7 +84,7 @@ Full setup, things to try and troubleshooting:
 | `FVC_API_KEY` | The API key. |
 | `FVC_MCP_LOG_LEVEL` | `Warning` by default; `Information` or `Debug` when a connection will not come up. Logs go to stderr. |
 
-## Tools (23)
+## Tools (40)
 
 | Tool | What it does |
 |---|---|
@@ -99,10 +102,18 @@ Full setup, things to try and troubleshooting:
 | `catalog_stats`, `list_bins`, `get_bin_videos` | Catalog size, the build serving it, and existing bins. |
 | `tag_video`, `tag_scene` | Add keywords to a video or a single scene. Editor key. |
 | `untag_video`, `untag_scene` | Remove named keywords again. Editor key. |
-| `create_bin`, `add_video_to_bin` | Build a collection. Editor key. |
+| `create_bin`, `add_video_to_bin`, `remove_video_from_bin` | Build a collection, or take a video out of one. Editor key. |
+| `update_video` | Change a video's title, description, link or rating. Editor key. |
+| `add_actor_to_video`, `remove_actor_from_video` | Put a person in a video's cast, or take them out. Editor key. |
+| `create_actor`, `update_actor`, `delete_actor` | Add a person to the catalog, change their name, bio or link, or delete them. Editor key. |
+| `keyword_usage` | How many videos and scenes carry a keyword. |
+| `rename_keyword`, `delete_keyword` | Rename or delete a keyword everywhere it is used. Cannot be undone. Editor key. |
+| `list_keyword_groups` | The keyword groups, such as Places or Clients, with their keywords. |
+| `create_keyword_group`, `rename_keyword_group`, `delete_keyword_group`, `add_keyword_to_group`, `remove_keyword_from_group` | Sort keywords into groups. Editor key. |
+| `set_video_path` | Point a catalog entry at a video file that was moved or renamed. Editor key. |
 | `index_video`, `list_videos_needing_indexing` | Index catalog entries that have no thumbnails yet. Editor key. |
 
-It cannot delete videos or bins, take a video out of a bin, play video or drive the player.
+It cannot delete videos or bins, play video or drive the player.
 
 ## Source
 

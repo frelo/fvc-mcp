@@ -4,8 +4,8 @@ The `fvc-mcp.exe` in the release bundle is a single-file build that includes the
 
 | Package | Version | License | Copyright |
 |---|---|---|---|
-| ModelContextProtocol, ModelContextProtocol.Core | 2.1.0 | Apache-2.0 | © Model Context Protocol a Series of LF Projects, LLC. (https://csharp.sdk.modelcontextprotocol.io/) |
-| Microsoft.Extensions.Hosting and the Microsoft.Extensions.* packages it depends on | 10.0.0 | MIT | © .NET Foundation and Contributors (https://github.com/dotnet/runtime) |
+| ModelContextProtocol, ModelContextProtocol.Core | 2.3.0 | Apache-2.0 | © Model Context Protocol a Series of LF Projects, LLC. (https://csharp.sdk.modelcontextprotocol.io/) |
+| Microsoft.Extensions.Hosting and the Microsoft.Extensions.* packages it depends on | 10.0.13 | MIT | © .NET Foundation and Contributors (https://github.com/dotnet/runtime) |
 
 It runs on the .NET 10 runtime (MIT, © .NET Foundation and Contributors), which is not included
 in the bundle; Fast Video Cataloger installs it.

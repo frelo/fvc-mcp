@@ -37,7 +37,7 @@ namespace FvcMcpServer
             - Call list_keywords before a keyword search. A keyword that is not in this catalog matches nothing rather than reporting an error, so a narrowed search can come back empty for that reason alone.
             - search_transcripts matches words exactly as they were transcribed. There is no spelling correction, and only videos that have already been transcribed are searched at all.
             - Scenes are thumbnails sampled through a video at a fixed interval, not detected shot changes. A scene list shows how the video was sampled, not where the cuts are.
-            - Tagging, bins and indexing need an API key with the Editor role; a Viewer key is refused. There is no tool to delete a bin or to take a video out of one, so confirm with the user before creating bins.
+            - Tagging, editing a video's details, cast, bins and indexing need an API key with the Editor role; a Viewer key is refused. There is no tool to delete a bin, so confirm with the user before creating bins. delete_keyword, rename_keyword and delete_actor change the whole catalog and cannot be undone: say what they touch and get the user's go-ahead first.
 
             Before helping the user report a problem with Fast Video Cataloger, call catalog_stats. It names the build serving this catalog: productVersion, buildChannel and buildDate. When buildChannel is anything other than "release" this is a pre-release build, so check whether the behaviour is already listed as fixed for that version before calling it a bug, and say which build it is in anything you write up. A buildChannel of "unknown" means the build predates this field, which makes it an old one.
             """;
@@ -68,6 +68,10 @@ namespace FvcMcpServer
             [Description("Comma-separated actor ids, to find the videos a person appears in. Get ids from " +
                          "search_actors. This is the reverse of get_video_actors.")] string actors = null,
             [Description("Only videos rated at least this (1-5).")] int? minRating = null,
+            [Description("Comma-separated colour labels the user gave videos; a video matches any of them. " +
+                         "One of orange, apricot, yellow, lime, olive, green, teal, navy, blue, purple, " +
+                         "violet, pink, tan, beige, brown, chocolate, or 'none' for videos without a colour. " +
+                         "Not combined with 'query'.")] string color = null,
             [Description("Maximum number of results. Defaults to 25.")] int? limit = 25,
             [Description("Skip this many results, for paging through a large set.")] int? offset = null,
             CancellationToken ct = default)
@@ -78,6 +82,7 @@ namespace FvcMcpServer
                 ("matchAllKeywords", matchAllKeywords),
                 ("actors", actors),
                 ("minRating", minRating),
+                ("color", color),
                 ("limit", limit),
                 ("offset", offset));
 
@@ -87,7 +92,8 @@ namespace FvcMcpServer
         [McpServerTool(Name = "search_scenes", ReadOnly = true, Title = "Search scenes")]
         [Description("Search individual scenes inside the user's Fast Video Cataloger videos, rather than " +
                      "whole videos. This is how you find the moment inside a video: each result carries a " +
-                     "thumbnail id, the video it belongs to, and its timecode. Pass the thumbnail id to " +
+                     "thumbnail id, the video it belongs to, and its timecode, and textOnScreen with the " +
+                     "words read on screen in it when there are any. Pass the thumbnail id to " +
                      "get_scene_image to look at it.")]
         public Task<string> SearchScenes(
             [Description("Comma-separated keywords. A scene matches if it is tagged with ANY of them, not all " +
@@ -95,22 +101,29 @@ namespace FvcMcpServer
                          "keywords come from object detection, so they are concrete things that appear in the " +
                          "frame ('person', 'laptop', 'car'), not themes or descriptions.")] string keywords = null,
             [Description("Free text to match against scene keywords.")] string query = null,
+            [Description("Words shown on screen in the scene: titles, captions, slides, signs, lower thirds. " +
+                         "Matched as whole words (a trailing * matches a prefix) against the text read in each " +
+                         "frame by OCR. Only videos indexed with Text on screen turned on, or read afterwards, " +
+                         "have any; OCR misreads some words, so try a shorter or different word before " +
+                         "concluding the text is not there.")] string text = null,
             [Description("Restrict the search to one video by its id.")] long? videoId = null,
             [Description("Maximum number of results. Defaults to 40.")] int? limit = 40,
             CancellationToken ct = default)
         {
             // With nothing to match on the server returns an empty result that serializes
             // to "{}", which reads as a broken tool rather than as "you asked for nothing".
-            if (string.IsNullOrWhiteSpace(keywords) && string.IsNullOrWhiteSpace(query) && videoId == null)
+            // A videoId alone is the same: it narrows a search, it does not list the video.
+            if (string.IsNullOrWhiteSpace(keywords) && string.IsNullOrWhiteSpace(query) && string.IsNullOrWhiteSpace(text))
             {
                 throw new FvcException(
-                    "Give search_scenes something to match: keywords, a query, or a videoId. " +
-                    "To list every scene of one video, use get_video_scenes.");
+                    "Give search_scenes something to match: keywords, a query or text, with videoId to " +
+                    "stay within one video. To list every scene of one video, use get_video_scenes.");
             }
 
             string q = FvcClient.Query(
                 ("keywords", keywords),
                 ("search", query),
+                ("text", text),
                 ("videoId", videoId),
                 ("limit", limit));
 
@@ -180,15 +193,19 @@ namespace FvcMcpServer
                         // frameTimeS is seconds (the catalog column is misnamed FrameTimeMS but holds seconds).
                         double seconds = s.TryGetProperty("frameTimeS", out var ft) && ft.ValueKind == JsonValueKind.Number ? ft.GetDouble() : 0;
                         double score = s.TryGetProperty("score", out var sc) && sc.ValueKind == JsonValueKind.Number ? sc.GetDouble() : 0;
-                        results.Add(new
+                        var result = new Dictionary<string, object>
                         {
-                            thumbnailId = thumbId,
-                            videoId = vid,
-                            video = titles.TryGetValue(vid, out var title) ? title : null,
-                            timeSeconds = Math.Round(seconds, 1),
-                            time = TimeSpan.FromSeconds(seconds).ToString(seconds >= 3600 ? @"h\:mm\:ss" : @"m\:ss"),
-                            relevance = Math.Round(score, 3),
-                        });
+                            ["thumbnailId"] = thumbId,
+                            ["videoId"] = vid,
+                            ["video"] = titles.TryGetValue(vid, out var title) ? title : null,
+                            ["timeSeconds"] = Math.Round(seconds, 1),
+                            ["time"] = TimeSpan.FromSeconds(seconds).ToString(seconds >= 3600 ? @"h\:mm\:ss" : @"m\:ss"),
+                            ["relevance"] = Math.Round(score, 3),
+                        };
+                        // Only on scenes with text, so the list stays one short line per scene
+                        if (s.TryGetProperty("textOnScreen", out var tos) && tos.ValueKind == JsonValueKind.String)
+                            result["textOnScreen"] = tos.GetString();
+                        results.Add(result);
                     }
                 }
                 return JsonSerializer.Serialize(new
@@ -210,9 +227,12 @@ namespace FvcMcpServer
                      "lines themselves - each with the id of the video it belongs to (videoFileID) " +
                      "and its start and end time in seconds, so you can go straight to the moment. " +
                      "Use get_video_transcript to read the lines around a hit. Only videos that have " +
-                     "been transcribed are searched.")]
+                     "been transcribed are searched. A line's speaker, when set, says who said it, as in " +
+                     "get_video_transcript. Give 'actor' to find what one person said.")]
         public async Task<string> SearchTranscripts(
             [Description("The words to look for in the transcripts.")] string query,
+            [Description("An actor id from search_actors: only the lines said by a speaker named as that " +
+                         "actor. Speakers not named as an actor are not found this way.")] long? actor = null,
             [Description("Maximum number of matching lines to return. Defaults to 25, maximum 200.")] int? limit = 25,
             CancellationToken ct = default)
         {
@@ -224,7 +244,7 @@ namespace FvcMcpServer
             // like video ids and silently resolve to the wrong videos, or to none at all. So
             // resolve each one into the line it points at before returning.
             string idJson = await _client.GetAsync(
-                "/api/v1/subtitles/search" + FvcClient.Query(("search", query)), ct);
+                "/api/v1/subtitles/search" + FvcClient.Query(("search", query), ("actorId", actor > 0 ? actor.ToString() : null)), ct);
 
             long[] ids;
             try
@@ -299,8 +319,10 @@ namespace FvcMcpServer
 
         [McpServerTool(Name = "get_video_scenes", ReadOnly = true, Title = "Get a video's scenes")]
         [Description("List the scene thumbnails of one video in timecode order. Use this to see how a " +
-                     "video is structured before deciding which moment to look at. Returns totalCount " +
-                     "so you can tell whether there are more than you asked for.")]
+                     "video is structured before deciding which moment to look at. A scene whose text on " +
+                     "screen has been read carries it as textOnScreen (titles, captions, slides; OCR, so " +
+                     "some words are misread). Returns totalCount so you can tell whether there are more " +
+                     "than you asked for.")]
         public Task<string> GetVideoScenes(
             [Description("The video's catalog id.")] long videoId,
             [Description("Maximum number of scenes. Defaults to 100.")] int? limit = 100,
@@ -314,7 +336,11 @@ namespace FvcMcpServer
         [McpServerTool(Name = "get_video_transcript", ReadOnly = true, Title = "Get a transcript")]
         [Description("Get the transcript of a video as timed lines. Empty if the video has not been " +
                      "transcribed. A feature-length transcript is very long, so this returns the first " +
-                     "200 lines by default - check totalCount and page with offset if you need the rest.")]
+                     "200 lines by default - check totalCount and page with offset if you need the rest. " +
+                     "When the video has more than one voice, each line's speaker says who speaks it: an " +
+                     "actor's name, a name the user gave, or 'Speaker 1', 'Speaker 2' for voices told apart " +
+                     "but not named. Voices are told apart by sound alone and can be wrong on short lines. " +
+                     "speaker is null when the video has one voice or was transcribed before version 10.6.")]
         public Task<string> GetVideoTranscript(
             [Description("The video's catalog id.")] long videoId,
             [Description("Maximum number of transcript lines. Defaults to 200.")] int? limit = 200,
@@ -332,7 +358,7 @@ namespace FvcMcpServer
                      "This is the vocabulary only, with no counts, and it mixes keywords the user typed " +
                      "with ones written automatically by object detection, so a catalog can list things " +
                      "like 'zebra' or 'toaster' that appear nowhere in the footage. Both scopes can " +
-                     "contain either kind. To find out whether a keyword is really used, search for it.")]
+                     "contain either kind. To find out whether a keyword is really used, call keyword_usage.")]
         public Task<string> ListKeywords(
             [Description("Which keywords to list: 'videos' for keywords on videos, 'scenes' for keywords " +
                          "on scene thumbnails. Defaults to videos.")] string scope = "videos",
@@ -575,6 +601,504 @@ namespace FvcMcpServer
             CancellationToken ct = default)
         {
             return _client.PostAsync($"/api/v1/bins/{binId}/videos", new { videoId }, ct);
+        }
+
+        [McpServerTool(Name = "remove_video_from_bin", Destructive = true, Title = "Take a video out of a bin")]
+        [Description("Take a video out of a bin - the counterpart to add_video_to_bin. The video stays in " +
+                     "the catalog and in any other bin it is in. Nothing happens if it was not in that " +
+                     "bin. Needs an API key with the Editor role.")]
+        public Task<string> RemoveVideoFromBin(
+            [Description("The bin's id.")] long binId,
+            [Description("The video's catalog id.")] long videoId,
+            CancellationToken ct = default)
+        {
+            return _client.DeleteAsync($"/api/v1/bins/{binId}/videos/{videoId}", ct);
+        }
+
+        [McpServerTool(Name = "update_video", Destructive = true, Title = "Edit a video's details")]
+        [Description("Change a video's title, description, link or rating. Only the fields you pass are " +
+                     "changed; leave a field out to keep it. Pass an empty string to clear the " +
+                     "description or the link. The new text replaces the old, so to add to a " +
+                     "description read it with get_video first and pass the whole text. Returns the " +
+                     "video as it is after the change. Needs an API key with the Editor role.")]
+        public async Task<string> UpdateVideo(
+            [Description("The video's catalog id.")] long videoId,
+            [Description("New title. Cannot be empty.")] string title = null,
+            [Description("New description. An empty string clears it.")] string description = null,
+            [Description("New link, e.g. a web page about the video. An empty string clears it.")] string link = null,
+            [Description("New rating, 0 to 5. 0 removes the rating.")] int? rating = null,
+            CancellationToken ct = default)
+        {
+            if (title == null && description == null && link == null && rating == null)
+                throw new FvcException("Pass at least one of title, description, link or rating.");
+
+            if (title != null && title.Trim().Length == 0)
+                throw new FvcException("A title cannot be empty. Leave title out to keep the current one.");
+
+            if (rating is < 0 or > 5)
+                throw new FvcException("A rating goes from 0 to 5.");
+
+            // The update endpoint answers OK for an id that matches no video, so check first.
+            await _client.GetAsync($"/api/v1/videos/{videoId}", ct);
+
+            await _client.PutAsync($"/api/v1/videos/{videoId}", new { title, description, link, rating }, ct);
+
+            return await _client.GetAsync($"/api/v1/videos/{videoId}", ct);
+        }
+
+        [McpServerTool(Name = "add_actor_to_video", Destructive = false, Title = "Add a person to a video's cast")]
+        [Description("Record that a person appears in a video. Get actor ids from search_actors; the " +
+                     "person must already exist in the catalog. Nothing changes if they are already in " +
+                     "the cast. Needs an API key with the Editor role.")]
+        public async Task<string> AddActorToVideo(
+            [Description("The video's catalog id.")] long videoId,
+            [Description("The actor's id, from search_actors.")] long actorId,
+            CancellationToken ct = default)
+        {
+            // Check both ends exist: the server inserts whatever ids it is given, and it adds a
+            // second cast row for a person who is already in the cast.
+            await _client.GetAsync($"/api/v1/videos/{videoId}", ct);
+            await _client.GetAsync($"/api/v1/actors/{actorId}", ct);
+
+            if (await IsInCastAsync(videoId, actorId, ct))
+                return JsonSerializer.Serialize(new { added = false, reason = "Already in the cast." });
+
+            await _client.PostAsync($"/api/v1/videos/{videoId}/cast/{actorId}", null, ct);
+            return JsonSerializer.Serialize(new { added = true });
+        }
+
+        [McpServerTool(Name = "remove_actor_from_video", Destructive = true, Title = "Remove a person from a video's cast")]
+        [Description("Remove a person from one video's cast - the counterpart to add_actor_to_video. The " +
+                     "person stays in the catalog and in the cast of every other video. Needs an API key " +
+                     "with the Editor role.")]
+        public async Task<string> RemoveActorFromVideo(
+            [Description("The video's catalog id.")] long videoId,
+            [Description("The actor's id, as get_video_actors reports it.")] long actorId,
+            CancellationToken ct = default)
+        {
+            if (!await IsInCastAsync(videoId, actorId, ct))
+                return JsonSerializer.Serialize(new { removed = false, reason = "Not in this video's cast." });
+
+            await _client.DeleteAsync($"/api/v1/videos/{videoId}/cast/{actorId}", ct);
+            return JsonSerializer.Serialize(new { removed = true });
+        }
+
+        private async Task<bool> IsInCastAsync(long videoId, long actorId, CancellationToken ct)
+        {
+            string cast = await _client.GetAsync($"/api/v1/videos/{videoId}/actors", ct);
+            try
+            {
+                using var doc = JsonDocument.Parse(cast);
+                if (doc.RootElement.ValueKind != JsonValueKind.Array)
+                    return false;
+
+                foreach (var actor in doc.RootElement.EnumerateArray())
+                {
+                    if (actor.TryGetProperty("id", out var id) && id.TryGetInt64(out long value) && value == actorId)
+                        return true;
+                }
+            }
+            catch (JsonException)
+            {
+                throw new FvcException("Could not read the video's cast, so nothing was changed.");
+            }
+            return false;
+        }
+
+        // ---------------------------------------------------------------- keywords and people
+
+        [McpServerTool(Name = "keyword_usage", ReadOnly = true, Title = "Count a keyword's use")]
+        [Description("How many videos and how many scenes carry one keyword. Use it to tell a keyword " +
+                     "that is really used from one that only sits in the list, and before rename_keyword " +
+                     "or delete_keyword so the user knows what the change touches. Name the keyword " +
+                     "exactly as list_keywords reports it.")]
+        public async Task<string> KeywordUsage(
+            [Description("The keyword, exactly as list_keywords reports it.")] string keyword,
+            CancellationToken ct = default)
+        {
+            var (id, name) = await FindKeywordAsync(keyword, ct);
+            var (videos, scenes) = await KeywordUseAsync(id, ct);
+            return JsonSerializer.Serialize(new { keyword = name, videos, scenes });
+        }
+
+        [McpServerTool(Name = "rename_keyword", Destructive = true, Title = "Rename a keyword")]
+        [Description("Rename a keyword everywhere it is used, on videos and on scenes alike. Refused when " +
+                     "another keyword already has the new name, so two keywords are never merged by " +
+                     "accident. Tell the user how many videos and scenes it is on (keyword_usage) and " +
+                     "confirm with them first. Needs an API key with the Editor role.")]
+        public async Task<string> RenameKeyword(
+            [Description("The keyword to rename, exactly as list_keywords reports it.")] string keyword,
+            [Description("The new name.")] string newName,
+            CancellationToken ct = default)
+        {
+            string to = newName?.Trim();
+            if (string.IsNullOrEmpty(to))
+                throw new FvcException("Give the new name.");
+            if (to.Contains(','))
+                throw new FvcException("A keyword name cannot contain a comma.");
+
+            var (id, name) = await FindKeywordAsync(keyword, ct);
+            foreach (string path in new[] { "/api/v1/tags/video", "/api/v1/tags/thumbnail" })
+            {
+                foreach (var (otherId, otherName) in await ReadNamedAsync(path, "tagID", ct))
+                {
+                    if (otherId != id && string.Equals(otherName, to, StringComparison.OrdinalIgnoreCase))
+                        throw new FvcException($"The catalog already has a keyword '{otherName}', so '{name}' was not renamed.");
+                }
+            }
+
+            await _client.PutAsync($"/api/v1/tags/{id}", new { name = to }, ct);
+            return JsonSerializer.Serialize(new { renamed = name, to });
+        }
+
+        [McpServerTool(Name = "delete_keyword", Destructive = true, Title = "Delete a keyword")]
+        [Description("Delete one keyword from the catalog: it is taken off every video, every scene or " +
+                     "both, and cannot be undone. One keyword at a time, named exactly; there are no " +
+                     "wildcards. Before calling this, tell the user how many videos and scenes carry " +
+                     "it (keyword_usage) and get their go-ahead. To take a keyword off one video, use " +
+                     "untag_video instead. Returns how many videos and scenes lost it. Needs an API key " +
+                     "with the Editor role.")]
+        public async Task<string> DeleteKeyword(
+            [Description("The keyword, exactly as list_keywords reports it.")] string keyword,
+            [Description("Where to delete it from: 'videos', 'scenes' or 'both'. Defaults to videos. A " +
+                         "keyword deleted from one stays in the catalog while the other still uses it.")] string scope = "videos",
+            CancellationToken ct = default)
+        {
+            string where = string.IsNullOrWhiteSpace(scope) ? "videos" : scope.Trim().ToLowerInvariant();
+            if (where is not ("videos" or "scenes" or "both"))
+                throw new FvcException("scope is one of 'videos', 'scenes' or 'both'.");
+            bool videos = where != "scenes";
+            bool scenes = where != "videos";
+
+            var (id, name) = await FindKeywordAsync(keyword, ct);
+            var (videoUses, sceneUses) = await KeywordUseAsync(id, ct);
+
+            if (videos)
+                await _client.DeleteAsync($"/api/v1/tags/{id}", ct);
+            if (scenes)
+                await _client.DeleteAsync($"/api/v1/tags/thumbnail/{id}", ct);
+
+            return JsonSerializer.Serialize(new
+            {
+                deleted = name,
+                videosUntagged = videos ? videoUses : 0,
+                scenesUntagged = scenes ? sceneUses : 0,
+            });
+        }
+
+        [McpServerTool(Name = "list_keyword_groups", ReadOnly = true, Title = "List keyword groups")]
+        [Description("List the keyword groups the user sorted their video keywords into, such as " +
+                     "'Places' or 'Clients', each with the keywords in it.")]
+        public async Task<string> ListKeywordGroups(CancellationToken ct = default)
+        {
+            var groups = new List<object>();
+            foreach (var (id, name) in await ReadNamedAsync("/api/v1/tags/groups", "groupID", ct))
+            {
+                var keywords = new List<string>();
+                foreach (var (_, keywordName) in await ReadNamedAsync($"/api/v1/tags/groups/{id}/video", "tagID", ct))
+                    keywords.Add(keywordName);
+                groups.Add(new { groupId = id, name, keywords });
+            }
+            return JsonSerializer.Serialize(groups);
+        }
+
+        [McpServerTool(Name = "create_keyword_group", Destructive = false, Title = "Create a keyword group")]
+        [Description("Create a keyword group to sort video keywords into. Nothing changes if a group " +
+                     "with that name exists; its id is returned either way. Needs an API key with the " +
+                     "Editor role.")]
+        public async Task<string> CreateKeywordGroup(
+            [Description("Name for the group, e.g. 'Places'.")] string name,
+            CancellationToken ct = default)
+        {
+            string wanted = name?.Trim();
+            if (string.IsNullOrEmpty(wanted))
+                throw new FvcException("Provide a name for the group.");
+
+            foreach (var (id, existing) in await ReadNamedAsync("/api/v1/tags/groups", "groupID", ct))
+            {
+                if (string.Equals(existing, wanted, StringComparison.OrdinalIgnoreCase))
+                    return JsonSerializer.Serialize(new { created = false, groupId = id, name = existing });
+            }
+
+            string idJson = await _client.PostAsync("/api/v1/tags/groups", new { name = wanted }, ct);
+            long.TryParse(idJson.Trim(), out long groupId);
+            return JsonSerializer.Serialize(new { created = true, groupId, name = wanted });
+        }
+
+        [McpServerTool(Name = "add_keyword_to_group", Destructive = false, Title = "Put a keyword in a group")]
+        [Description("Put a video keyword into a keyword group. Get group ids from list_keyword_groups. " +
+                     "Needs an API key with the Editor role.")]
+        public async Task<string> AddKeywordToGroup(
+            [Description("The group's id, from list_keyword_groups.")] long groupId,
+            [Description("The keyword, exactly as list_keywords reports it.")] string keyword,
+            CancellationToken ct = default)
+        {
+            var (id, name) = await FindKeywordAsync(keyword, ct);
+            await _client.PostAsync($"/api/v1/tags/groups/{groupId}/tags/{id}", null, ct);
+            return JsonSerializer.Serialize(new { added = name, groupId });
+        }
+
+        [McpServerTool(Name = "remove_keyword_from_group", Destructive = true, Title = "Take a keyword out of a group")]
+        [Description("Take a keyword out of a keyword group - the counterpart to add_keyword_to_group. The " +
+                     "keyword stays in the catalog and on its videos. Needs an API key with the Editor role.")]
+        public async Task<string> RemoveKeywordFromGroup(
+            [Description("The group's id, from list_keyword_groups.")] long groupId,
+            [Description("The keyword, exactly as list_keywords reports it.")] string keyword,
+            CancellationToken ct = default)
+        {
+            var (id, name) = await FindKeywordAsync(keyword, ct);
+            await _client.DeleteAsync($"/api/v1/tags/groups/{groupId}/tags/{id}", ct);
+            return JsonSerializer.Serialize(new { removed = name, groupId });
+        }
+
+        [McpServerTool(Name = "rename_keyword_group", Destructive = true, Title = "Rename a keyword group")]
+        [Description("Rename a keyword group. Its keywords stay in it. Refused when another group already " +
+                     "has the new name. Needs an API key with the Editor role.")]
+        public async Task<string> RenameKeywordGroup(
+            [Description("The group's id, from list_keyword_groups.")] long groupId,
+            [Description("The new name.")] string newName,
+            CancellationToken ct = default)
+        {
+            string to = newName?.Trim();
+            if (string.IsNullOrEmpty(to))
+                throw new FvcException("Give the new name.");
+
+            var groups = await ReadNamedAsync("/api/v1/tags/groups", "groupID", ct);
+            string name = GroupName(groups, groupId);
+            foreach (var (id, existing) in groups)
+            {
+                if (id != groupId && string.Equals(existing, to, StringComparison.OrdinalIgnoreCase))
+                    throw new FvcException($"The catalog already has a keyword group '{existing}', so '{name}' was not renamed.");
+            }
+
+            await _client.PutAsync($"/api/v1/tags/groups/{groupId}", new { name = to }, ct);
+            return JsonSerializer.Serialize(new { renamed = name, to, groupId });
+        }
+
+        [McpServerTool(Name = "delete_keyword_group", Destructive = true, Title = "Delete a keyword group")]
+        [Description("Delete a keyword group. Only the grouping goes: its keywords stay in the catalog and " +
+                     "on their videos and scenes. Pass the group's name as well as the id: the delete is " +
+                     "refused when the two do not match. Tell the user which keywords are in it " +
+                     "(list_keyword_groups) and confirm first. Needs an API key with the Editor role.")]
+        public async Task<string> DeleteKeywordGroup(
+            [Description("The group's id, from list_keyword_groups.")] long groupId,
+            [Description("The group's name as list_keyword_groups reports it, to confirm the id.")] string name,
+            CancellationToken ct = default)
+        {
+            string actual = GroupName(await ReadNamedAsync("/api/v1/tags/groups", "groupID", ct), groupId);
+            if (!string.Equals(actual, name?.Trim(), StringComparison.OrdinalIgnoreCase))
+                throw new FvcException($"Keyword group {groupId} is '{actual}', not '{name}', so nothing was deleted.");
+
+            int keywords = (await ReadNamedAsync($"/api/v1/tags/groups/{groupId}/video", "tagID", ct)).Count;
+            await _client.DeleteAsync($"/api/v1/tags/groups/{groupId}", ct);
+            return JsonSerializer.Serialize(new { deleted = actual, groupId, keywordsUngrouped = keywords });
+        }
+
+        static string GroupName(List<(long id, string name)> groups, long groupId)
+        {
+            foreach (var (id, name) in groups)
+                if (id == groupId)
+                    return name;
+            throw new FvcException($"There is no keyword group {groupId}. Check list_keyword_groups for the id.");
+        }
+
+        [McpServerTool(Name = "create_actor", Destructive = false, Title = "Add a person to the catalog")]
+        [Description("Add a person to the catalog, so they can be put in a video's cast with " +
+                     "add_actor_to_video. Nothing is added when someone with exactly that name exists; " +
+                     "their id is returned instead. Returns the person with their id. Needs an API key " +
+                     "with the Editor role.")]
+        public async Task<string> CreateActor(
+            [Description("First name, or the whole name for a person known by one.")] string firstName,
+            [Description("Last name.")] string lastName = null,
+            [Description("A few lines about the person.")] string bio = null,
+            [Description("A link, e.g. a web page about the person.")] string link = null,
+            CancellationToken ct = default)
+        {
+            if (string.IsNullOrWhiteSpace(firstName))
+                throw new FvcException("Provide at least a first name.");
+
+            string full = FullName(firstName, lastName);
+            string found = await _client.GetAsync("/api/v1/actors" + FvcClient.Query(("search", full), ("limit", 50)), ct);
+            foreach (var actor in ActorSummaries(found))
+            {
+                if (string.Equals((string)actor["name"], full, StringComparison.OrdinalIgnoreCase))
+                    return JsonSerializer.Serialize(new { created = false, reason = "Already in the catalog.", actor });
+            }
+
+            string created = await _client.PostAsync("/api/v1/actors",
+                new { firstName = firstName.Trim(), lastName = lastName?.Trim(), bio, link }, ct);
+            return JsonSerializer.Serialize(new { created = true, actor = ActorSummary(created) });
+        }
+
+        [McpServerTool(Name = "update_actor", Destructive = true, Title = "Edit a person's details")]
+        [Description("Change a person's name, bio or link. Only the fields you pass are changed, and a " +
+                     "field cannot be cleared this way. The new text replaces the old, so to add to a bio " +
+                     "read it first and pass the whole text. Returns the person as they are after the " +
+                     "change. Needs an API key with the Editor role.")]
+        public async Task<string> UpdateActor(
+            [Description("The actor's id, from search_actors.")] long actorId,
+            [Description("New first name.")] string firstName = null,
+            [Description("New last name.")] string lastName = null,
+            [Description("New bio.")] string bio = null,
+            [Description("New link.")] string link = null,
+            CancellationToken ct = default)
+        {
+            if (string.IsNullOrWhiteSpace(firstName) && string.IsNullOrWhiteSpace(lastName) &&
+                string.IsNullOrWhiteSpace(bio) && string.IsNullOrWhiteSpace(link))
+                throw new FvcException("Pass at least one of firstName, lastName, bio or link, not empty.");
+
+            await _client.PutAsync($"/api/v1/actors/{actorId}", new { firstName, lastName, bio, link }, ct);
+            return JsonSerializer.Serialize(ActorSummary(await _client.GetAsync($"/api/v1/actors/{actorId}", ct)));
+        }
+
+        [McpServerTool(Name = "delete_actor", Destructive = true, Title = "Delete a person")]
+        [Description("Delete a person from the catalog. This cannot be undone: they leave the cast of " +
+                     "every video, their learned faces are deleted, and faces found as them become " +
+                     "unnamed people again. Their videos stay. Pass their name as well as the id: the " +
+                     "delete is refused when the two do not match, so a mistyped id deletes no one. " +
+                     "Before calling this, tell the user how many videos they are in (search_videos " +
+                     "with actors) and get their go-ahead. To take someone out of one video, use " +
+                     "remove_actor_from_video instead. Needs an API key with the Editor role.")]
+        public async Task<string> DeleteActor(
+            [Description("The actor's id, from search_actors.")] long actorId,
+            [Description("The person's full name as search_actors reports it, to confirm the id.")] string name,
+            CancellationToken ct = default)
+        {
+            var actor = ActorSummary(await _client.GetAsync($"/api/v1/actors/{actorId}", ct));
+            string actual = (string)actor["name"];
+            if (!string.Equals(actual, name?.Trim(), StringComparison.OrdinalIgnoreCase))
+                throw new FvcException($"Actor {actorId} is '{actual}', not '{name}', so no one was deleted.");
+
+            long videos = 0;
+            string inVideos = await _client.GetAsync("/api/v1/videos" + FvcClient.Query(("actors", actorId), ("limit", 1)), ct);
+            try
+            {
+                using var doc = JsonDocument.Parse(inVideos);
+                if (doc.RootElement.ValueKind == JsonValueKind.Object && doc.RootElement.TryGetProperty("totalCount", out var tc))
+                    tc.TryGetInt64(out videos);
+            }
+            catch (JsonException)
+            {
+            }
+
+            await _client.DeleteAsync($"/api/v1/actors/{actorId}", ct);
+            return JsonSerializer.Serialize(new { deleted = actual, removedFromVideos = videos });
+        }
+
+        [McpServerTool(Name = "set_video_path", Destructive = true, Title = "Point a video at its file")]
+        [Description("Change where a catalog entry looks for its video file, for a file that was moved or " +
+                     "renamed outside Fast Video Cataloger. Only the catalog changes: no file is moved, " +
+                     "and the path is not checked, so give the full path as the server's computer sees " +
+                     "it. Everything else about the video is kept. Returns the video after the change. " +
+                     "Needs an API key with the Editor role.")]
+        public async Task<string> SetVideoPath(
+            [Description("The video's catalog id.")] long videoId,
+            [Description("The file's full path, e.g. 'D:\\Footage\\2024\\interview.mp4'.")] string path,
+            CancellationToken ct = default)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+                throw new FvcException("Provide the file's full path.");
+
+            await _client.GetAsync($"/api/v1/videos/{videoId}", ct);
+            await _client.PutAsync($"/api/v1/videos/{videoId}/path", new { newPath = path.Trim() }, ct);
+            return await _client.GetAsync($"/api/v1/videos/{videoId}", ct);
+        }
+
+        /// <summary>
+        /// A keyword by name, from the video keywords and then the scene ones (both lists are one
+        /// table, so the id is the same). An exact match wins over one that differs in case only.
+        /// One name, no wildcards: a delete or rename must never reach a keyword nobody named.
+        /// </summary>
+        private async Task<(long id, string name)> FindKeywordAsync(string keyword, CancellationToken ct)
+        {
+            string want = keyword?.Trim();
+            if (string.IsNullOrEmpty(want))
+                throw new FvcException("Name the keyword.");
+            if (want.Contains(','))
+                throw new FvcException("Name one keyword at a time, exactly as list_keywords reports it.");
+
+            var all = new List<(long id, string name)>();
+            all.AddRange(await ReadNamedAsync("/api/v1/tags/video", "tagID", ct));
+            all.AddRange(await ReadNamedAsync("/api/v1/tags/thumbnail", "tagID", ct));
+            foreach (var tag in all)
+                if (tag.name == want)
+                    return tag;
+            foreach (var tag in all)
+                if (string.Equals(tag.name, want, StringComparison.OrdinalIgnoreCase))
+                    return tag;
+            throw new FvcException($"'{want}' is not a keyword in this catalog. Check list_keywords for the exact name.");
+        }
+
+        private async Task<(long videos, long scenes)> KeywordUseAsync(long id, CancellationToken ct)
+        {
+            long.TryParse((await _client.GetAsync($"/api/v1/tags/{id}/usage", ct)).Trim(), out long videos);
+            long.TryParse((await _client.GetAsync($"/api/v1/tags/thumbnail/{id}/usage", ct)).Trim(), out long scenes);
+            return (videos, scenes);
+        }
+
+        /// <summary>The id and name of each row of a list the server returns.</summary>
+        private async Task<List<(long id, string name)>> ReadNamedAsync(string path, string idField, CancellationToken ct)
+        {
+            string json = await _client.GetAsync(path, ct);
+            var rows = new List<(long, string)>();
+            try
+            {
+                using var doc = JsonDocument.Parse(json);
+                var root = doc.RootElement;
+                if (root.ValueKind == JsonValueKind.Object && root.TryGetProperty("data", out var data))
+                    root = data;
+                if (root.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var element in root.EnumerateArray())
+                    {
+                        if (element.TryGetProperty(idField, out var idProp) && idProp.TryGetInt64(out long id) &&
+                            element.TryGetProperty("name", out var nameProp))
+                            rows.Add((id, nameProp.GetString() ?? ""));
+                    }
+                }
+            }
+            catch (JsonException)
+            {
+                throw new FvcException("Could not read the catalog's answer, so nothing was changed.");
+            }
+            return rows;
+        }
+
+        static string FullName(string first, string last) => ((first ?? "").Trim() + " " + (last ?? "").Trim()).Trim();
+
+        // An actor without the portrait bytes, which would fill the answer with base64.
+        static Dictionary<string, object> ActorSummary(string json)
+        {
+            using var doc = JsonDocument.Parse(json);
+            return ActorSummary(doc.RootElement);
+        }
+
+        static Dictionary<string, object> ActorSummary(JsonElement actor)
+        {
+            string Text(string field) => actor.TryGetProperty(field, out var p) && p.ValueKind == JsonValueKind.String ? p.GetString() : null;
+            long id = actor.TryGetProperty("id", out var idProp) && idProp.TryGetInt64(out long value) ? value : 0;
+            return new Dictionary<string, object>
+            {
+                ["id"] = id,
+                ["name"] = FullName(Text("firstName"), Text("lastName")),
+                ["firstName"] = Text("firstName"),
+                ["lastName"] = Text("lastName"),
+                ["bio"] = Text("bio"),
+                ["link"] = Text("link"),
+            };
+        }
+
+        static List<Dictionary<string, object>> ActorSummaries(string json)
+        {
+            var list = new List<Dictionary<string, object>>();
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+            if (root.ValueKind == JsonValueKind.Object && root.TryGetProperty("data", out var data))
+                root = data;
+            if (root.ValueKind == JsonValueKind.Array)
+                foreach (var actor in root.EnumerateArray())
+                    list.Add(ActorSummary(actor));
+            return list;
         }
 
         [McpServerTool(Name = "index_video", Destructive = false, Title = "Index a video")]

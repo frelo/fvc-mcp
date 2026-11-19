@@ -2,9 +2,9 @@
   "manifest_version": "0.3",
   "name": "fast-video-cataloger",
   "display_name": "Fast Video Cataloger",
-  "version": "10.4.0",
+  "version": "10.6.0",
   "description": "Search, view and tag your local video library from Claude: transcripts, scenes, visual search.",
-  "long_description": "Fast Video Cataloger keeps a searchable catalog of your own video files on Windows: scene thumbnails, keywords, transcripts and faces. This extension lets Claude work with that catalog. Find videos and moments by what was said or by what the picture shows (visual search, nothing tagged first), fetch scene thumbnails to judge a shot, and, with an Editor key, add keywords and gather clips into bins.\n\n**Requires Fast Video Cataloger 10.4 or later** (Windows, free 30-day trial) with your catalog shared through its server: in the program, open the start page's Server section and click Setup. Create an API key with Manage Users in the same section: Viewer to search and read, Editor to also tag and build bins.\n\nThe extension talks to the Fast Video Cataloger server on your own computer. No video is uploaded; Claude receives the titles, transcript lines and scene images it asks for.",
+  "long_description": "Fast Video Cataloger keeps a searchable catalog of your own video files on Windows: scene thumbnails, keywords, transcripts and faces. This extension lets Claude work with that catalog. Find videos and moments by what was said or by what the picture shows (visual search, nothing tagged first), fetch scene thumbnails to judge a shot, and, with an Editor key, tag videos, gather clips into bins and edit the catalog: video details, cast, people, keywords and keyword groups.\n\n**Requires Fast Video Cataloger 10.4 or later** (Windows, free 30-day trial) with your catalog shared through its server: in the program, open the start page's Server section and click Setup. Create an API key with Manage Users in the same section: Viewer to search and read, Editor to also tag, build bins and edit the catalog.\n\nThe extension talks to the Fast Video Cataloger server on your own computer. No video is uploaded; Claude receives the titles, transcript lines and scene images it asks for.",
   "author": {
     "name": "VideoStorm Sweden AB",
     "url": "https://videocataloger.com/"
@@ -51,10 +51,6 @@
       "description": "Find people by name or tag."
     },
     {
-      "name": "list_keywords",
-      "description": "The keywords the catalog actually uses, to search with."
-    },
-    {
       "name": "get_video",
       "description": "One catalog entry in full."
     },
@@ -65,6 +61,10 @@
     {
       "name": "get_video_transcript",
       "description": "A video's transcript as timed lines."
+    },
+    {
+      "name": "list_keywords",
+      "description": "The keywords the catalog actually uses, to search with."
     },
     {
       "name": "get_video_tags",
@@ -95,10 +95,6 @@
       "description": "Add keywords to a video (Editor key)."
     },
     {
-      "name": "tag_scene",
-      "description": "Add keywords to a single scene (Editor key)."
-    },
-    {
       "name": "untag_video",
       "description": "Remove named keywords from a video (Editor key)."
     },
@@ -107,12 +103,84 @@
       "description": "Remove named keywords from a scene (Editor key)."
     },
     {
+      "name": "tag_scene",
+      "description": "Add keywords to a single scene (Editor key)."
+    },
+    {
       "name": "create_bin",
       "description": "Create a bin (Editor key)."
     },
     {
       "name": "add_video_to_bin",
       "description": "Add a video to a bin (Editor key)."
+    },
+    {
+      "name": "remove_video_from_bin",
+      "description": "Take a video out of a bin - the counterpart to add_video_to_bin."
+    },
+    {
+      "name": "update_video",
+      "description": "Change a video's title, description, link or rating."
+    },
+    {
+      "name": "add_actor_to_video",
+      "description": "Record that a person appears in a video."
+    },
+    {
+      "name": "remove_actor_from_video",
+      "description": "Remove a person from one video's cast - the counterpart to add_actor_to_video."
+    },
+    {
+      "name": "keyword_usage",
+      "description": "How many videos and how many scenes carry one keyword."
+    },
+    {
+      "name": "rename_keyword",
+      "description": "Rename a keyword everywhere it is used, on videos and on scenes alike."
+    },
+    {
+      "name": "delete_keyword",
+      "description": "Delete one keyword from the catalog: it is taken off every video, every scene or both, and cannot be undone."
+    },
+    {
+      "name": "list_keyword_groups",
+      "description": "List the keyword groups the user sorted their video keywords into, such as 'Places' or 'Clients', each with the keywords in it."
+    },
+    {
+      "name": "create_keyword_group",
+      "description": "Create a keyword group to sort video keywords into."
+    },
+    {
+      "name": "add_keyword_to_group",
+      "description": "Put a video keyword into a keyword group."
+    },
+    {
+      "name": "remove_keyword_from_group",
+      "description": "Take a keyword out of a keyword group - the counterpart to add_keyword_to_group."
+    },
+    {
+      "name": "rename_keyword_group",
+      "description": "Rename a keyword group."
+    },
+    {
+      "name": "delete_keyword_group",
+      "description": "Delete a keyword group."
+    },
+    {
+      "name": "create_actor",
+      "description": "Add a person to the catalog, so they can be put in a video's cast with add_actor_to_video."
+    },
+    {
+      "name": "update_actor",
+      "description": "Change a person's name, bio or link."
+    },
+    {
+      "name": "delete_actor",
+      "description": "Delete a person from the catalog."
+    },
+    {
+      "name": "set_video_path",
+      "description": "Change where a catalog entry looks for its video file, for a file that was moved or renamed outside Fast Video Cataloger."
     },
     {
       "name": "index_video",
